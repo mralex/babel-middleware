@@ -17,7 +17,6 @@ function fileLastModifiedHash(path) {
 module.exports = function(options) {
     options = options || {};
 
-    var useSourcemaps = options.useSourcemaps || false;
     var srcPath = options.srcPath;
     var cachePath = options.cachePath || 'memory';
     var isMemoryCache = cachePath === 'memory';
