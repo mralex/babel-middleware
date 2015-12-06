@@ -90,9 +90,13 @@ function baseSuite() {
             this.url = '/test_output.js';
 
             fs.writeFileSync(this.filename, 'console.log("Hello, world");');
-            request(this.app).get(this.url).end(done);
+            request(this.app).get(this.url).end(function(err, res) {
+                this.originalBody = res.body;
+                fs.writeFileSync(this.filename, 'console.log("The world changed");');
+                done();
+            }.bind(this));
 
-            sleep.usleep(1000000);
+            sleep.sleep(1);
         });
 
         afterEach(function() {
@@ -100,12 +104,20 @@ function baseSuite() {
         });
 
         it('does not return a cached response', function(done) {
-            fs.writeFileSync(this.filename, 'console.log("The world changed");');
             request(this.app)
                 .get(this.url)
                 .expect('X-Babel-Cache-Hit', 'false')
                 .expect(200, done);
         });
+
+        it('does not return the original code', function(done) {
+            request(this.app)
+                .get(this.url)
+                .end(function(err, res) {
+                    expect(res.body).not.to.equal(this.originalBody);
+                    done();
+                });
+        })
     })
 }
 
