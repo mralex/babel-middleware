@@ -1,6 +1,7 @@
 var babel = require('babel-core');
 var fs = require('fs');
 var crypto = require('crypto');
+var micromatch = require('micromatch');
 
 require('babel-preset-es2015');
 require('babel-preset-stage-0');
@@ -20,6 +21,7 @@ module.exports = function(options) {
     var srcPath = options.srcPath;
     var cachePath = options.cachePath || 'memory';
     var isMemoryCache = cachePath === 'memory';
+    var exclude = options.exclude || [];
 
     // filename to last known hash map
     var hashMap = {};
@@ -44,6 +46,19 @@ module.exports = function(options) {
         var hash = fileLastModifiedHash(src);
         var lastKnownHash = hashMap[src];
         var hashPath;
+
+        if (exclude.length) {
+            if (micromatch.any(req.path.replace(/^\/+|\/+$/g, ''), exclude)) {
+                console.log('Excluded: %s (%s)', req.path, exclude);
+                res.append('X-Babel-Cache', false);
+                res.sendFile(src, {}, function(err) {
+                    if (err) {
+                        res.status(500).send(err).end();
+                    }
+                });
+                return;
+            }
+        }
 
         res.append('X-Babel-Cache', true);
         res.append('X-Babel-Cache-Hash', hash);
