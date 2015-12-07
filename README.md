@@ -34,6 +34,11 @@ Use either _memory_ for an in-memory cache; or a path to the desired cache direc
 
 Default: _memory_
 
+### `exclude: ['production/example/*.js']`
+An array of path globs to exclude from transpiling and caching. Returns the originally requested file. See [Micromatch documentation](https://www.npmjs.com/package/micromatch) for globbing examples. Exclusions do not match against `srcPath`.
+
+Default: _[]_
+
 ### `babelOptions: {}`
 An options object passed into `babel.transformFile`. See [Babel documentation](https://babeljs.io/docs/usage/options/) for usage.
 

@@ -117,8 +117,8 @@ function baseSuite() {
                     expect(res.body).not.to.equal(this.originalBody);
                     done();
                 });
-        })
-    })
+        });
+    });
 }
 
 describe('middleware', function() {
@@ -244,6 +244,27 @@ describe('middleware', function() {
 
                 deletedFileTests();
             });
-        })
+        });
+    });
+
+    describe('excluding files', function() {
+        beforeEach(function() {
+            this.app = express();
+            this.app.use(babelMiddleware({
+                cachePath: 'memory',
+                srcPath: __dirname + '/fixtures',
+                exclude: ['*syntax*']
+            }));
+        });
+
+        it('returns the original file on request', function(done) {
+            var expectedCode = fs.readFileSync(__dirname + '/fixtures/counter-syntax-error.js', 'utf8');
+
+            request(this.app)
+                .get('/counter-syntax-error.js')
+                .expect('X-Babel-Cache', 'false')
+                .expect(200)
+                .expect(expectedCode, done);
+        });
     });
 });
