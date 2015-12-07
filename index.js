@@ -1,6 +1,8 @@
-var babel = require('babel-core');
 var fs = require('fs');
+var path = require('path');
 var crypto = require('crypto');
+
+var babel = require('babel-core');
 var micromatch = require('micromatch');
 
 require('babel-preset-es2015');
@@ -22,6 +24,7 @@ module.exports = function(options) {
     var cachePath = options.cachePath || 'memory';
     var isMemoryCache = cachePath === 'memory';
     var exclude = options.exclude || [];
+    var debug = options.debug || false;
 
     // filename to last known hash map
     var hashMap = {};
@@ -37,19 +40,25 @@ module.exports = function(options) {
 
     var babelOptions = options.babelOptions || { presets: ['es2015', 'stage-0'] };
 
+    function log() {
+        if (debug) {
+            console.log.apply(undefined, arguments);
+        }
+    }
+
     function pathForHash(hash) {
-        return cachePath + '/' + hash + '.js';
+        return path.resolve(cachePath + '/' + hash + '.js');
     }
 
     return function(req, res, next) {
-        var src = srcPath + '/' + req.path; // XXX Need the correct path
+        var src = path.resolve(srcPath + '/' + req.path); // XXX Need the correct path
         var hash = fileLastModifiedHash(src);
         var lastKnownHash = hashMap[src];
         var hashPath;
 
         if (exclude.length) {
             if (micromatch.any(req.path.replace(/^\/+|\/+$/g, ''), exclude)) {
-                console.log('Excluded: %s (%s)', req.path, exclude);
+                log('Excluded: %s (%s)', req.path, exclude);
                 res.append('X-Babel-Cache', false);
                 res.sendFile(src, {}, function(err) {
                     if (err) {
@@ -59,6 +68,8 @@ module.exports = function(options) {
                 return;
             }
         }
+
+        log('Preparing: %s (%s)', src, hash);
 
         res.append('X-Babel-Cache', true);
         res.append('X-Babel-Cache-Hash', hash);
@@ -94,9 +105,11 @@ module.exports = function(options) {
             if (!cacheMiss) {
                 res.append('X-Babel-Cache-Hit', true);
                 if (isMemoryCache) {
+                    log('Serving (cached): %s', src);
                     res.write(cacheMap[hash]);
                     res.end();
                 } else {
+                    log('Serving (cached): %s', hashPath);
                     res.sendFile(hashPath, {}, function(err) {
                         if (err) {
                             res.status(500).send(err).end();
@@ -137,6 +150,7 @@ module.exports = function(options) {
                     }
                 });
             }
+            log('Serving (uncached): %s', src);
             res.write(code);
             res.end();
         });

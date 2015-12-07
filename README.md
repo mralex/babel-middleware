@@ -42,6 +42,11 @@ Default: _[]_
 ### `babelOptions: {}`
 An options object passed into `babel.transformFile`. See [Babel documentation](https://babeljs.io/docs/usage/options/) for usage.
 
+### `debug: true|false`
+Print debug output.
+
+Default: _false_
+
 LICENSE
 =======
 
