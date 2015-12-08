@@ -130,29 +130,30 @@ module.exports = function(options) {
             } catch(e) {}
         }
 
-        babel.transformFile(src, babelOptions, function(err, result) {
-            if (err) {
-                res.status(500).send(err);
-                res.end();
-                return;
-            }
-
-            var code = result.code;
-            hashMap[src] = hash;
-
-            if (isMemoryCache) {
-                cacheMap[hash] = code;
-            } else {
-                fs.writeFile(hashPath, code, function(err) {
-                    if (err) {
-                        // console.error('Error saving ' + hashPath + ': ' + err);
-                        delete hashMap[src];
-                    }
-                });
-            }
-            log('Serving (uncached): %s', src);
-            res.write(code);
+        var result;
+        try {
+            result = babel.transformFileSync(src, babelOptions);
+        } catch(e) {
+            res.status(500).send(e);
             res.end();
-        });
+            return;
+        }
+ 
+        var code = result.code;
+        hashMap[src] = hash;
+
+        if (isMemoryCache) {
+            cacheMap[hash] = code;
+        } else {
+            fs.writeFile(hashPath, code, function(err) {
+                if (err) {
+                    // console.error('Error saving ' + hashPath + ': ' + err);
+                    delete hashMap[src];
+                }
+            });
+        }
+        log('Serving (uncached): %s', src);
+        res.write(code);
+        res.end();
     };
 };
