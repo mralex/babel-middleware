@@ -7,6 +7,9 @@ var fs = require('fs'),
     babel = require('babel-core'),
     babelMiddleware = require('../index');
 
+require('babel-preset-es2015');
+require('babel-preset-stage-0');
+
 function transformFile(file) {
     return babel.transformFileSync(file, { presets: ['es2015', 'stage-0'] }).code;
 }

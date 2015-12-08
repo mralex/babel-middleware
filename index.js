@@ -5,9 +5,6 @@ var crypto = require('crypto');
 var babel = require('babel-core');
 var micromatch = require('micromatch');
 
-require('babel-preset-es2015');
-require('babel-preset-stage-0');
-
 function fileLastModifiedHash(path) {
     var mtime = fs.lstatSync(path).mtime.getTime();
 
@@ -138,7 +135,7 @@ module.exports = function(options) {
             res.end();
             return;
         }
- 
+
         var code = result.code;
         hashMap[src] = hash;
 
