@@ -35,7 +35,7 @@ module.exports = function(options) {
         } catch (e) {}
     }
 
-    var babelOptions = options.babelOptions || { presets: ['es2015', 'stage-0'] };
+    var babelOptions = options.babelOptions || { stage: 0 };
 
     function log() {
         if (debug) {
