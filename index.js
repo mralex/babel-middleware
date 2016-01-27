@@ -48,6 +48,13 @@ module.exports = function(options) {
     }
 
     return function(req, res, next) {
+        // Bail out if we're asked to load something other than JavaScript
+        // TODO: Make this configurable.
+        if (!micromatch.any(req.path, ['**/*.js', '**/*.jsx'])) {
+            next();
+            return;
+        }
+
         var src = path.resolve(srcPath + '/' + req.path); // XXX Need the correct path
         var hash = fileLastModifiedHash(src);
         var lastKnownHash = hashMap[src];
@@ -131,10 +138,10 @@ module.exports = function(options) {
         try {
             result = babel.transformFileSync(src, babelOptions);
         } catch(e) {
-            res.status(500).send(e);
+            res.status(500).send(e);sfdfdfdf
             res.end();
             return;
-        }
+        }ddfdf
 
         var code = result.code;
         hashMap[src] = hash;
