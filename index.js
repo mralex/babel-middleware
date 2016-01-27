@@ -138,10 +138,10 @@ module.exports = function(options) {
         try {
             result = babel.transformFileSync(src, babelOptions);
         } catch(e) {
-            res.status(500).send(e);sfdfdfdf
+            res.status(500).send(e);
             res.end();
             return;
-        }ddfdf
+        }
 
         var code = result.code;
         hashMap[src] = hash;
