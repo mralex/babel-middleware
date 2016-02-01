@@ -22,7 +22,7 @@ module.exports = function(options) {
     var isMemoryCache = cachePath === 'memory';
     var exclude = options.exclude || [];
     var debug = options.debug || false;
-    var webConsoleErrors = options.consoleErrors || true;
+    var webConsoleErrors = options.consoleErrors || false;
 
     // filename to last known hash map
     var hashMap = {};
