@@ -9,9 +9,9 @@ function fileLastModifiedHash(path) {
     var mtime = fs.lstatSync(path).mtime.getTime();
 
     return crypto
-            .createHash('md5')
-            .update(mtime + '-' + path)
-            .digest('hex');
+        .createHash('md5')
+        .update(mtime + '-' + path)
+        .digest('hex');
 }
 
 module.exports = function(options) {
@@ -22,6 +22,7 @@ module.exports = function(options) {
     var isMemoryCache = cachePath === 'memory';
     var exclude = options.exclude || [];
     var debug = options.debug || false;
+    var webConsoleErrors = options.consoleErrors || true;
 
     // filename to last known hash map
     var hashMap = {};
@@ -37,10 +38,29 @@ module.exports = function(options) {
 
     var babelOptions = options.babelOptions || { stage: 0 };
 
+    babelOptions.highlightCode = false;
+
     function log() {
         if (debug) {
             console.log.apply(undefined, arguments);
         }
+    }
+
+    function handleError(res, error) {
+        if (webConsoleErrors) {
+            var errOutput = String(error).replace(/\'/g, '\\\'').replace(/\"/g, '\\\"');
+
+            res.send(
+                '/* Babel parsing error from babel-middleware */' +
+                '\n /* See error console output for details. */' +
+                '\n var output = ' + JSON.stringify(error) +
+                '\n console.error("' + errOutput + '", output.codeFrame)'
+            );
+        } else {
+            res.status(500).send(error);
+        }
+
+        res.end();
     }
 
     function pathForHash(hash) {
@@ -48,13 +68,6 @@ module.exports = function(options) {
     }
 
     return function(req, res, next) {
-        // Bail out if we're asked to load something other than JavaScript
-        // TODO: Make this configurable.
-        if (!micromatch.any(req.path, ['**/*.js', '**/*.jsx'])) {
-            next();
-            return;
-        }
-
         var src = path.resolve(srcPath + '/' + req.path); // XXX Need the correct path
         var hash = fileLastModifiedHash(src);
         var lastKnownHash = hashMap[src];
@@ -66,7 +79,7 @@ module.exports = function(options) {
                 res.append('X-Babel-Cache', false);
                 res.sendFile(src, {}, function(err) {
                     if (err) {
-                        res.status(500).send(err).end();
+                        handleError(res, err);
                     }
                 });
                 return;
@@ -116,7 +129,7 @@ module.exports = function(options) {
                     log('Serving (cached): %s', hashPath);
                     res.sendFile(hashPath, {}, function(err) {
                         if (err) {
-                            res.status(500).send(err).end();
+                            handleError(res, err);
                         }
                     });
                 }
@@ -138,8 +151,7 @@ module.exports = function(options) {
         try {
             result = babel.transformFileSync(src, babelOptions);
         } catch(e) {
-            res.status(500).send(e);
-            res.end();
+            handleError(res, e);
             return;
         }
 
