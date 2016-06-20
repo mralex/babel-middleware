@@ -36,7 +36,7 @@ module.exports = function(options) {
         } catch (e) {}
     }
 
-    var babelOptions = options.babelOptions || { stage: 0 };
+    var babelOptions = options.babelOptions || { presets: [] };
 
     babelOptions.highlightCode = false;
 
