@@ -8,7 +8,7 @@ var fs = require('fs'),
     babelMiddleware = require('../index');
 
 function transformFile(file) {
-    return babel.transformFileSync(file, { stage: 0 }).code;
+    return babel.transformFileSync(file, { presets: [] }).code;
 }
 
 function baseSuite() {
