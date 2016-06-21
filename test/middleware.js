@@ -249,12 +249,14 @@ describe('middleware', function() {
 
     describe('excluding files', function() {
         beforeEach(function() {
+            var root = __dirname + '/fixtures';
             this.app = express();
             this.app.use(babelMiddleware({
                 cachePath: 'memory',
-                srcPath: __dirname + '/fixtures',
+                srcPath: root,
                 exclude: ['*syntax*']
             }));
+            this.app.use(express.static(root));
         });
 
         it('returns the original file on request', function(done) {
