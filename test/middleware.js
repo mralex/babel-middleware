@@ -267,4 +267,38 @@ describe('middleware', function() {
                 .expect(expectedCode, done);
         });
     });
+
+    describe('missing and invalid filenames', function () {
+        describe('a missing file', function() {
+            beforeEach(function() {
+                this.app = express();
+                this.app.use(babelMiddleware({
+                    cachePath: 'memory',
+                    srcPath: __dirname + '/fixtures'
+                }));
+            });
+
+            it('404s', function(done) {
+                request(this.app)
+                    .get('/missing-file.js')
+                    .expect(404, done);
+            });
+        });
+
+        describe('a subdirectory', function() {
+            beforeEach(function() {
+                this.app = express();
+                this.app.use(babelMiddleware({
+                    cachePath: 'memory',
+                    srcPath: __dirname + '/fixtures'
+                }));
+            });
+
+            it('404s', function(done) {
+                request(this.app)
+                    .get('/subdirectory')
+                    .expect(404, done);
+            });
+        });
+    });
 });

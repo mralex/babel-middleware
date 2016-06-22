@@ -5,8 +5,8 @@ var crypto = require('crypto');
 var babel = require('babel-core');
 var micromatch = require('micromatch');
 
-function fileLastModifiedHash(path) {
-    var mtime = fs.lstatSync(path).mtime.getTime();
+function lastModifiedHash(path, stats) {
+    var mtime = stats.mtime.getTime();
 
     return crypto
         .createHash('md5')
@@ -69,7 +69,23 @@ module.exports = function(options) {
 
     return function(req, res, next) {
         var src = path.resolve(srcPath + '/' + req.path); // XXX Need the correct path
-        var hash = fileLastModifiedHash(src);
+
+        var stats;
+        try {
+            stats = fs.lstatSync(src);
+        } catch(e) {
+            // file not found, try the next!
+            next();
+            return;
+        }
+
+        if (! stats || ! stats.isFile()) {
+            // not a file, next!
+            next();
+            return;
+        }
+
+        var hash = lastModifiedHash(src, stats);
         var lastKnownHash = hashMap[src];
         var hashPath;
 
