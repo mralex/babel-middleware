@@ -47,6 +47,16 @@ Print debug output.
 
 Default: _false_
 
+### `consoleErrors: true|false`
+Print errors to the web console.
+
+Default: _false_
+
+### `serverConsoleErrors: true|false`
+Print errors to the server console.
+
+Default: _false_
+
 LICENSE
 =======
 
