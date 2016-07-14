@@ -22,6 +22,7 @@ module.exports = function(options) {
     var isMemoryCache = cachePath === 'memory';
     var exclude = options.exclude || [];
     var debug = options.debug || false;
+    var serverConsoleErrors = options.serverConsoleErrors || false;
     var webConsoleErrors = options.consoleErrors || false;
 
     // filename to last known hash map
@@ -46,15 +47,26 @@ module.exports = function(options) {
         }
     }
 
-    function handleError(res, error) {
-        if (webConsoleErrors) {
-            var errOutput = String(error).replace(/\'/g, '\\\'').replace(/\"/g, '\\\"');
+    function logError() {
+        console.error.apply(undefined, arguments);
+    }
 
+    function handleError(res, error) {
+        var errOutput = String(error).replace(/\'/g, '\\\'').replace(/\"/g, '\\\"');
+
+        if (serverConsoleErrors) {
+            logError(
+                'Babel parsing error from babel-middleware' +
+                '\n "' + errOutput + '"', error.codeFrame
+            );
+        }
+
+        if (webConsoleErrors) {
             res.send(
                 '/* Babel parsing error from babel-middleware */' +
                 '\n /* See error console output for details. */' +
                 '\n var output = ' + JSON.stringify(error) +
-                '\n console.error("' + errOutput + '", output.codeFrame)'
+                '\n console.error("' + errOutput + '\\n", output.codeFrame)'
             );
         } else {
             res.status(500).send(error);
