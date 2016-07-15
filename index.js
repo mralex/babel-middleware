@@ -116,6 +116,7 @@ module.exports = function(options) {
             }
 
             if (!cacheMiss) {
+                res.append('Content-Type', 'application/javascript');
                 res.append('X-Babel-Cache-Hit', true);
                 if (isMemoryCache) {
                     log('Serving (cached): %s', src);
@@ -165,6 +166,7 @@ module.exports = function(options) {
             });
         }
         log('Serving (uncached): %s', src);
+        res.append('Content-Type', 'application/javascript');
         res.write(code);
         res.end();
     };
