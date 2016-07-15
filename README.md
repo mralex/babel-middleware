@@ -52,10 +52,11 @@ Print errors to the web console.
 
 Default: _false_
 
-### `serverConsoleErrors: true|false`
-Print errors to the server console.
+### `logLevel: debug|info|warn|error|critical|none
+Minimum log level to print to the server console.
+Left is lowest, right highest.
 
-Default: _false_
+Default: _none_
 
 LICENSE
 =======
