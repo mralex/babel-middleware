@@ -7,9 +7,14 @@ var fs = require('fs'),
     babel = require('babel-core'),
     babelMiddleware = require('../index');
 
-function transformFile(file) {
-    return babel.transformFileSync(file, { presets: [] }).code;
+function transformFile(file, options) {
+    return babel.transformFileSync(file, options || { presets: [] }).code;
 }
+
+function generateMap(file) {
+    return babel.transformFileSync(file, { presets: [], sourceMaps: true }).map;
+}
+
 
 function baseSuite() {
 
@@ -230,7 +235,7 @@ describe('middleware', function() {
                     request(this.app)
                         .get('/counter.js')
                         .expect('Content-Type', 'application/javascript')
-                        .expect('X-Babel-Cache-Hit', 'false')
+                        .expect('X-Babel-Cache-Hit', 'true')
                         .expect(200, done);
                 });
 
@@ -309,6 +314,162 @@ describe('middleware', function() {
                 request(this.app)
                     .get('/subdirectory')
                     .expect(404, done);
+            });
+        });
+    });
+
+    describe('source maps disabled', function () {
+        beforeEach(function() {
+            this.app = express();
+            this.app.use(babelMiddleware({
+                cachePath: 'memory',
+                srcPath: __dirname + '/fixtures',
+                babelOptions: {
+                    sourceMaps: false
+                }
+            }));
+        });
+
+        it('404s if map file not found', function(done) {
+            request(this.app)
+                .get('/counter.js.map')
+                .expect(404, done);
+        });
+    });
+
+    describe('source maps enabled', function () {
+        beforeEach(function() {
+            this.app = express();
+            this.app.use(babelMiddleware({
+                cachePath: 'memory',
+                srcPath: __dirname + '/fixtures',
+                babelOptions: {
+                    sourceMaps: true
+                }
+            }));
+        });
+
+        it('returns the js file with the map declaration', function(done) {
+            var expectedCode = transformFile(__dirname + '/fixtures/counter.js', { presets: [], sourceMaps: true }) +
+             '\n//# sourceMappingURL=counter.js.map';
+
+            request(this.app)
+                .get('/counter.js')
+                .expect(200)
+                .expect(expectedCode, done);
+        });
+
+        it('returns an uncached, expected map file', function(done) {
+            var expectedMap = JSON.stringify(generateMap(__dirname + '/fixtures/counter.js'));
+
+            request(this.app)
+                .get('/counter.js.map')
+                .expect(200)
+                .expect('X-Babel-Cache-Hit', 'false')
+                .expect('Content-Type', 'application/json')
+                .expect(expectedMap, done);
+        });
+
+        it('returns a cached map file', function(done) {
+            var expectedMap = JSON.stringify(generateMap(__dirname + '/fixtures/counter.js'));
+
+            var app = this.app;
+            request(app)
+                .get('/counter.js.map')
+                .expect(200)
+                .expect('X-Babel-Cache-Hit', 'false')
+                .expect('Content-Type', 'application/json')
+                .expect(expectedMap)
+                .end(function (err) {
+                    if (err) {
+                      return done(err);
+                    }
+
+                    request(app)
+                        .get('/counter.js.map')
+                        .expect(200)
+                        .expect('X-Babel-Cache-Hit', 'true')
+                        .expect('Content-Type', 'application/json')
+                        .expect(expectedMap, done);
+                });
+
+        });
+
+        it('404s if map file not found', function() {
+            request(this.app)
+                .get('/not-found.js.map')
+                .expect(404);
+        });
+    });
+
+    describe('sourcemaps with filesystem cache', function() {
+        beforeEach(function() {
+            this.cachePath = __dirname + '/_cache';
+            rimraf.sync(this.cachePath, {}, function() {});
+
+            this.app = express();
+            this.app.use(babelMiddleware({
+                cachePath: this.cachePath,
+                srcPath: __dirname + '/fixtures',
+                babelOptions: {
+                    sourceMaps: true
+                }
+            }));
+        });
+
+        it('caches a file', function(done) {
+            request(this.app)
+                .get('/counter.js.map')
+                .end(function(err, res) {
+                    var hash = res.header['x-babel-cache-hash'];
+                    var filename = this.cachePath + '/' + hash + '.js.map';
+
+                    expect(function() {
+                        fs.lstatSync(filename);
+                    }).to.not.throw();
+
+                    done();
+                }.bind(this));
+        });
+
+        describe('on restart', function() {
+            beforeEach(function(done) {
+                var self = this;
+                request(this.app)
+                    .get('/counter.js.map')
+                    .end(function () {
+                        self.app2 = express();
+                        self.app2.use(babelMiddleware({
+                            cachePath: self.cachePath,
+                            srcPath: __dirname + '/fixtures',
+                            babelOptions: {
+                                sourceMaps: true
+                            }
+                        }));
+                        done();
+                    });
+            });
+
+            it('uses previously cached js assets', function(done) {
+                var expectedCode = transformFile(__dirname + '/fixtures/counter.js', { presets: [], sourceMaps: true }) +
+                 '\n//# sourceMappingURL=counter.js.map';
+
+                request(this.app2)
+                    .get('/counter.js')
+                    .expect('Content-Type', 'application/javascript')
+                    .expect('X-Babel-Cache-Hit', 'true')
+                    .expect(200)
+                    .expect(expectedCode, done);
+            });
+
+            it('uses previously cached map assets', function(done) {
+                var expectedMap = JSON.stringify(generateMap(__dirname + '/fixtures/counter.js'));
+                request(this.app2)
+                    .get('/counter.js.map')
+                    .expect('Content-Type', 'application/json')
+                    .expect('X-Babel-Cache-Hit', 'true')
+                    .expect(200)
+                    .expect(expectedMap, done);
             });
         });
     });

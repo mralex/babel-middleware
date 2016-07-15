@@ -16,10 +16,10 @@ function lastModifiedHash(path, stats) {
         .digest('hex');
 }
 
-function getFileStats(src) {
+function getFileStats(jsSrc) {
     var stats;
     try {
-        stats = fs.lstatSync(src);
+        stats = fs.lstatSync(jsSrc);
     } catch(e) {
         // path not found
         return null;
@@ -41,109 +41,171 @@ function isExcluded(path, exclude) {
     return false;
 }
 
+function pathForHash(cachePath, hash) {
+    return path.resolve(path.join(cachePath, hash + '.js'));
+}
+
+/**
+ * Get the JS path for a request's path. Assumes reqPath is either
+ * a .js or .map file.
+ */
+function jsPathForReqPath(srcPath, reqPath) {
+    var jsPath = reqPath.replace(/\.map$/, '');
+
+    return path.resolve(path.join(srcPath, jsPath)); // XXX Need the correct path
+}
+
+
+function isJS(ext) {
+    return ext === '.js';
+}
+
+function isMap(ext) {
+    return ext === '.map';
+}
+
+var CONTENT_TYPE_HEADERS = {
+  '.js': 'application/javascript',
+  '.map': 'application/json'
+};
+
+function contentTypeHeader(ext) {
+    return CONTENT_TYPE_HEADERS[ext];
+}
+
+function send(res, data, ext) {
+    res.append('Content-Type', contentTypeHeader(ext));
+    res.write(data);
+    res.end();
+}
+
+function handleError(res, error, webConsoleErrors, logger) {
+    var errOutput = String(error).replace(/\'/g, '\\\'').replace(/\"/g, '\\\"');
+
+    logger.error(
+        'Babel parsing error from babel-middleware' +
+        '\n "' + errOutput + '"', '\n' + error.codeFrame
+    );
+
+    if (webConsoleErrors) {
+        res.send(
+            '/* Babel parsing error from babel-middleware */' +
+            '\n /* See error console output for details. */' +
+            '\n var output = ' + JSON.stringify(error) +
+            '\n console.error("' + errOutput + '\\n", output.codeFrame)'
+        );
+    } else {
+        res.status(500).send(error);
+    }
+
+    res.end();
+}
+
+
 module.exports = function(options) {
     options = options || {};
 
-    var srcPath = options.srcPath;
+    var babelOptions = options.babelOptions || { presets: [] };
     var cachePath = options.cachePath || 'memory';
     var exclude = options.exclude || [];
-    var webConsoleErrors = options.consoleErrors || false;
+    var jsSrcToHash = {};
     var logger = new Logger(options.logLevel || 'none');
-
-    // filename to last known hash map
-    var hashMap = {};
+    var srcPath = options.srcPath;
+    var webConsoleErrors = options.consoleErrors || false;
 
     var cache = new Cache(options.cachePath, logger, options);
 
-    var babelOptions = options.babelOptions || { presets: [] };
-
     babelOptions.highlightCode = false;
 
-    function handleError(res, error) {
-        var errOutput = String(error).replace(/\'/g, '\\\'').replace(/\"/g, '\\\"');
+    return function (req, res, next) {
+        var ext = path.extname(req.path);
+        var isPathJS = isJS(ext);
+        var isPathMap = isMap(ext);
 
-        logger.error(
-            'Babel parsing error from babel-middleware' +
-            '\n "' + errOutput + '"', '\n' + error.codeFrame
-        );
-
-        if (webConsoleErrors) {
-            res.send(
-                '/* Babel parsing error from babel-middleware */' +
-                '\n /* See error console output for details. */' +
-                '\n var output = ' + JSON.stringify(error) +
-                '\n console.error("' + errOutput + '\\n", output.codeFrame)'
-            );
-        } else {
-            res.status(500).send(error);
-        }
-
-        res.end();
-    }
-
-    function pathForHash(hash) {
-        return path.resolve(cachePath + '/' + hash + '.js');
-    }
-
-    return function(req, res, next) {
         if (isExcluded(req.path, exclude)) {
             logger.debug('Excluded: %s (%s)', req.path, exclude);
             res.append('X-Babel-Cache', false);
             return next();
-        }
-
-        var src = path.resolve(srcPath + '/' + req.path); // XXX Need the correct path
-        var stats = getFileStats(src);
-        if (! stats) {
-            // not a valid file, pass to the next middleware
+        } else if (isPathMap && ! babelOptions.sourceMaps) {
+            logger.debug('sourceMaps not enabled: %s', req.path);
+            res.append('X-Babel-Cache', false);
+            return next();
+        } else if (! isPathJS && ! isPathMap) {
+            logger.debug('Non-supported file type: %s', req.path);
+            res.append('X-Babel-Cache', false);
             return next();
         }
 
-        var hash = lastModifiedHash(src, stats);
-        var lastKnownHash = hashMap[src];
+        var jsSrc = jsPathForReqPath(srcPath, req.path);
+        var jsSrcStats = getFileStats(jsSrc);
 
-        // Clean up cached resources any time the
-        // hash has changed.
-        if (lastKnownHash && lastKnownHash !== hash) {
-            cache.remove(pathForHash(lastKnownHash));
+        if (! jsSrcStats) {
+            logger.debug('JavaScript file not found', jsSrc);
+            res.append('X-Babel-Cache', false);
+            return next();
         }
 
-        logger.debug('Preparing: %s (%s)', src, hash);
+        // From this point down, we know the JS file exists, and we can
+        // create the compiled source and sourceMap if needed.
+
+        var jsHash = lastModifiedHash(jsSrc, jsSrcStats);
+        var lastKnownJsHash = jsSrcToHash[jsSrc];
+
+        // Clean up old cached resources when the JS file has been updated.
+        if (lastKnownJsHash && lastKnownJsHash !== jsHash) {
+            cache.remove(pathForHash(cachePath, lastKnownJsHash));
+        }
+
+        logger.debug('Preparing: %s (%s)', req.path, jsHash);
 
         res.append('X-Babel-Cache', true);
-        res.append('X-Babel-Cache-Hash', hash);
+        res.append('X-Babel-Cache-Hash', jsHash);
 
-        var hashPath = pathForHash(hash);
+        var jsHashPath = pathForHash(cachePath, jsHash);
+        var mapHashPath = jsHashPath + '.map';
 
-        var code = cache.get(hashPath);
-        if (code) {
-            hashMap[src] = hash;
-            res.append('Content-Type', 'application/javascript');
+        var cachedData = cache.get(isPathJS ? jsHashPath : mapHashPath);
+        if (cachedData) {
+            jsSrcToHash[jsSrc] = jsHash;
+            logger.debug('Serving (cached): %s', req.path);
             res.append('X-Babel-Cache-Hit', true);
-            logger.debug('Serving (cached): %s', src);
-            res.write(code);
-            res.end();
+
+            send(res, cachedData, ext);
             return;
         }
 
         // expect an X-Babel-Cache-Hit header even on a parse error.
         res.append('X-Babel-Cache-Hit', false);
 
+        // Create both the trasnspiled source and possibly
+        // the source map. Store both to the cache. Serve
+        // the correct one based off of the extension.
         var result;
         try {
-            result = babel.transformFileSync(src, babelOptions);
-        } catch(e) {
-            handleError(res, e);
+            result = babel.transformFileSync(jsSrc, babelOptions);
+        } catch (err) {
+            handleError(res, err, webConsoleErrors, logger);
             return;
         }
 
-        code = result.code;
-        hashMap[src] = hash;
+        jsSrcToHash[jsSrc] = jsHash;
 
-        cache.store(hashPath, code);
-        logger.debug('Serving (uncached): %s', src);
-        res.append('Content-Type', 'application/javascript');
-        res.write(code);
-        res.end();
+        var code = result.code;
+        var map = result.map;
+
+        if (map) {
+            map = JSON.stringify(result.map);
+            cache.store(jsHashPath + '.map', map);
+
+            var mapFilename = path.basename(jsSrc) + '.map';
+            code += '\n//# sourceMappingURL=' + mapFilename;
+        }
+
+        // the code to store on disk only has the sourceMappingURL after
+        // the above `if (map)` branch is executed.
+        cache.store(jsHashPath, code);
+
+        logger.debug('Serving (uncached): %s', req.path);
+        send(res, isPathJS ? code : map, ext);
     };
 };

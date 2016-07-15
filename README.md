@@ -29,26 +29,31 @@ Options
 ### `srcPath: '/path/to/js/'`
 An absolute or relative path to the input source. This option is required.
 
+### `babelOptions: {}`
+An options object passed into `babel.transformFile`. See [Babel documentation](https://babeljs.io/docs/usage/options/) for usage.
+
 ### `cachePath: '/path/to/cache/'|'memory'`
 Use either _memory_ for an in-memory cache; or a path to the desired cache directory (it does not need to exist when the app starts).
 
 Default: _memory_
 
-### `exclude: ['production/example/*.js']`
-An array of path globs to exclude from transpiling and caching. Returns the originally requested file. See [Micromatch documentation](https://www.npmjs.com/package/micromatch) for globbing examples. Exclusions do not match against `srcPath`.
+### `consoleErrors: true|false`
+Print errors to the web console.
 
-Default: _[]_
-
-### `babelOptions: {}`
-An options object passed into `babel.transformFile`. See [Babel documentation](https://babeljs.io/docs/usage/options/) for usage.
+Default: _false_
 
 ### `debug: true|false`
 Print debug output.
 
 Default: _false_
 
-### `consoleErrors: true|false`
-Print errors to the web console.
+### `exclude: ['production/example/*.js']`
+An array of path globs to exclude from transpiling and caching. Returns the originally requested file. See [Micromatch documentation](https://www.npmjs.com/package/micromatch) for globbing examples. Exclusions do not match against `srcPath`.
+
+Default: _[]_
+
+### `freshCache: true|false`
+Start with a fresh disk cache on every restart.
 
 Default: _false_
 
