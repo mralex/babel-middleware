@@ -24,7 +24,7 @@
   },
   "homepage": "https://github.com/mralex/babel-middleware",
   "dependencies": {
-    "babel-core": "^5.8.34",
+    "babel-core": "^6.9.1",
     "micromatch": "^2.3.5"
   },
   "devDependencies": {
