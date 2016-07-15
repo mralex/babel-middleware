@@ -1,10 +1,11 @@
-var fs = require('fs');
-var path = require('path');
-var crypto = require('crypto');
 
 var babel = require('babel-core');
-var micromatch = require('micromatch');
+var Cache = require('./lib/cache');
+var crypto = require('crypto');
+var fs = require('fs');
 var Logger = require('./lib/logger');
+var micromatch = require('micromatch');
+var path = require('path');
 
 function lastModifiedHash(path, stats) {
     var mtime = stats.mtime.getTime();
@@ -15,28 +16,44 @@ function lastModifiedHash(path, stats) {
         .digest('hex');
 }
 
+function getFileStats(src) {
+    var stats;
+    try {
+        stats = fs.lstatSync(src);
+    } catch(e) {
+        // path not found
+        return null;
+    }
+
+    if (! stats || ! stats.isFile()) {
+        // not a file
+        return null;
+    }
+
+    return stats;
+}
+
+function isExcluded(path, exclude) {
+    if (exclude.length) {
+        return micromatch.any(path.replace(/^\/+|\/+$/g, ''), exclude);
+    }
+
+    return false;
+}
+
 module.exports = function(options) {
     options = options || {};
 
     var srcPath = options.srcPath;
     var cachePath = options.cachePath || 'memory';
-    var isMemoryCache = cachePath === 'memory';
     var exclude = options.exclude || [];
-    var debug = options.debug || false;
     var webConsoleErrors = options.consoleErrors || false;
     var logger = new Logger(options.logLevel || 'none');
 
     // filename to last known hash map
     var hashMap = {};
 
-    // hash to transpiled file contents map
-    var cacheMap = {};
-
-    if (!isMemoryCache) {
-        try {
-            fs.mkdirSync(cachePath);
-        } catch (e) {}
-    }
+    var cache = new Cache(options.cachePath, logger, options);
 
     var babelOptions = options.babelOptions || { presets: [] };
 
@@ -69,34 +86,26 @@ module.exports = function(options) {
     }
 
     return function(req, res, next) {
-        var src = path.resolve(srcPath + '/' + req.path); // XXX Need the correct path
-
-        var stats;
-        try {
-            stats = fs.lstatSync(src);
-        } catch(e) {
-            // file not found, try the next!
-            next();
-            return;
+        if (isExcluded(req.path, exclude)) {
+            logger.debug('Excluded: %s (%s)', req.path, exclude);
+            res.append('X-Babel-Cache', false);
+            return next();
         }
 
-        if (! stats || ! stats.isFile()) {
-            // not a file, next!
-            next();
-            return;
+        var src = path.resolve(srcPath + '/' + req.path); // XXX Need the correct path
+        var stats = getFileStats(src);
+        if (! stats) {
+            // not a valid file, pass to the next middleware
+            return next();
         }
 
         var hash = lastModifiedHash(src, stats);
         var lastKnownHash = hashMap[src];
-        var hashPath;
 
-        if (exclude.length) {
-            if (micromatch.any(req.path.replace(/^\/+|\/+$/g, ''), exclude)) {
-                logger.debug('Excluded: %s (%s)', req.path, exclude);
-                res.append('X-Babel-Cache', false);
-                next();
-                return;
-            }
+        // Clean up cached resources any time the
+        // hash has changed.
+        if (lastKnownHash && lastKnownHash !== hash) {
+            cache.remove(pathForHash(lastKnownHash));
         }
 
         logger.debug('Preparing: %s (%s)', src, hash);
@@ -104,62 +113,21 @@ module.exports = function(options) {
         res.append('X-Babel-Cache', true);
         res.append('X-Babel-Cache-Hash', hash);
 
-        if (!isMemoryCache) {
-            hashPath = pathForHash(hash);
-            try {
-                fs.statSync(hashPath);
-                hashMap[src] = lastKnownHash = hash;
-            } catch(e) {}
+        var hashPath = pathForHash(hash);
+
+        var code = cache.get(hashPath);
+        if (code) {
+            hashMap[src] = hash;
+            res.append('Content-Type', 'application/javascript');
+            res.append('X-Babel-Cache-Hit', true);
+            logger.debug('Serving (cached): %s', src);
+            res.write(code);
+            res.end();
+            return;
         }
 
-        if (lastKnownHash && lastKnownHash === hash) {
-            // file unchanged, exit early
-            var cacheMiss = false;
-            if (!isMemoryCache) {
-                try {
-                    fs.lstatSync(hashPath);
-                } catch(e) {
-                    cacheMiss = true;
-                }
-
-                // Ensure Cache directory exists
-                if (cacheMiss) {
-                    try {
-                        fs.lstatSync(cachePath);
-                    } catch (e) {
-                        fs.mkdirSync(cachePath);
-                    }
-                }
-            }
-
-            if (!cacheMiss) {
-                res.append('Content-Type', 'application/javascript');
-                res.append('X-Babel-Cache-Hit', true);
-                if (isMemoryCache) {
-                    logger.debug('Serving (cached): %s', src);
-                    res.write(cacheMap[hash]);
-                    res.end();
-                } else {
-                    logger.debug('Serving (cached): %s', hashPath);
-                    res.sendFile(hashPath, {}, function(err) {
-                        if (err) {
-                            handleError(res, err);
-                        }
-                    });
-                }
-                return;
-            }
-        }
-
+        // expect an X-Babel-Cache-Hit header even on a parse error.
         res.append('X-Babel-Cache-Hit', false);
-
-        if (isMemoryCache && lastKnownHash && lastKnownHash in cacheMap) {
-            delete cacheMap[lastKnownHash];
-        } else if (!isMemoryCache && lastKnownHash) {
-            try {
-                fs.unlinkSync(pathForHash(lastKnownHash));
-            } catch(e) {}
-        }
 
         var result;
         try {
@@ -169,19 +137,10 @@ module.exports = function(options) {
             return;
         }
 
-        var code = result.code;
+        code = result.code;
         hashMap[src] = hash;
 
-        if (isMemoryCache) {
-            cacheMap[hash] = code;
-        } else {
-            fs.writeFile(hashPath, code, function(err) {
-                if (err) {
-                    // console.error('Error saving ' + hashPath + ': ' + err);
-                    delete hashMap[src];
-                }
-            });
-        }
+        cache.store(hashPath, code);
         logger.debug('Serving (uncached): %s', src);
         res.append('Content-Type', 'application/javascript');
         res.write(code);
