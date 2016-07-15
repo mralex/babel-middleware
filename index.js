@@ -4,6 +4,7 @@ var crypto = require('crypto');
 
 var babel = require('babel-core');
 var micromatch = require('micromatch');
+var Logger = require('./lib/logger');
 
 function lastModifiedHash(path, stats) {
     var mtime = stats.mtime.getTime();
@@ -22,8 +23,8 @@ module.exports = function(options) {
     var isMemoryCache = cachePath === 'memory';
     var exclude = options.exclude || [];
     var debug = options.debug || false;
-    var serverConsoleErrors = options.serverConsoleErrors || false;
     var webConsoleErrors = options.consoleErrors || false;
+    var logger = new Logger(options.logLevel || 'none');
 
     // filename to last known hash map
     var hashMap = {};
@@ -41,25 +42,13 @@ module.exports = function(options) {
 
     babelOptions.highlightCode = false;
 
-    function log() {
-        if (debug) {
-            console.log.apply(undefined, arguments);
-        }
-    }
-
-    function logError() {
-        console.error.apply(undefined, arguments);
-    }
-
     function handleError(res, error) {
         var errOutput = String(error).replace(/\'/g, '\\\'').replace(/\"/g, '\\\"');
 
-        if (serverConsoleErrors) {
-            logError(
-                'Babel parsing error from babel-middleware' +
-                '\n "' + errOutput + '"', error.codeFrame
-            );
-        }
+        logger.error(
+            'Babel parsing error from babel-middleware' +
+            '\n "' + errOutput + '"', '\n' + error.codeFrame
+        );
 
         if (webConsoleErrors) {
             res.send(
@@ -103,14 +92,14 @@ module.exports = function(options) {
 
         if (exclude.length) {
             if (micromatch.any(req.path.replace(/^\/+|\/+$/g, ''), exclude)) {
-                log('Excluded: %s (%s)', req.path, exclude);
+                logger.debug('Excluded: %s (%s)', req.path, exclude);
                 res.append('X-Babel-Cache', false);
                 next();
                 return;
             }
         }
 
-        log('Preparing: %s (%s)', src, hash);
+        logger.debug('Preparing: %s (%s)', src, hash);
 
         res.append('X-Babel-Cache', true);
         res.append('X-Babel-Cache-Hash', hash);
@@ -147,11 +136,11 @@ module.exports = function(options) {
                 res.append('Content-Type', 'application/javascript');
                 res.append('X-Babel-Cache-Hit', true);
                 if (isMemoryCache) {
-                    log('Serving (cached): %s', src);
+                    logger.debug('Serving (cached): %s', src);
                     res.write(cacheMap[hash]);
                     res.end();
                 } else {
-                    log('Serving (cached): %s', hashPath);
+                    logger.debug('Serving (cached): %s', hashPath);
                     res.sendFile(hashPath, {}, function(err) {
                         if (err) {
                             handleError(res, err);
@@ -193,7 +182,7 @@ module.exports = function(options) {
                 }
             });
         }
-        log('Serving (uncached): %s', src);
+        logger.debug('Serving (uncached): %s', src);
         res.append('Content-Type', 'application/javascript');
         res.write(code);
         res.end();
