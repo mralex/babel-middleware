@@ -77,11 +77,7 @@ module.exports = function(options) {
             if (micromatch.any(req.path.replace(/^\/+|\/+$/g, ''), exclude)) {
                 log('Excluded: %s (%s)', req.path, exclude);
                 res.append('X-Babel-Cache', false);
-                res.sendFile(src, {}, function(err) {
-                    if (err) {
-                        handleError(res, err);
-                    }
-                });
+                next();
                 return;
             }
         }
