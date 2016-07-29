@@ -29,23 +29,39 @@ Options
 ### `srcPath: '/path/to/js/'`
 An absolute or relative path to the input source. This option is required.
 
+### `babelOptions: {}`
+An options object passed into `babel.transformFile`. See [Babel documentation](https://babeljs.io/docs/usage/options/) for usage.
+
 ### `cachePath: '/path/to/cache/'|'memory'`
 Use either _memory_ for an in-memory cache; or a path to the desired cache directory (it does not need to exist when the app starts).
 
 Default: _memory_
+
+### `consoleErrors: true|false`
+Print errors to the web console.
+
+Default: _false_
+
+### `debug: true|false`
+Print debug output.
+
+Default: _false_
 
 ### `exclude: ['production/example/*.js']`
 An array of path globs to exclude from transpiling and caching. Returns the originally requested file. See [Micromatch documentation](https://www.npmjs.com/package/micromatch) for globbing examples. Exclusions do not match against `srcPath`.
 
 Default: _[]_
 
-### `babelOptions: {}`
-An options object passed into `babel.transformFile`. See [Babel documentation](https://babeljs.io/docs/usage/options/) for usage.
-
-### `debug: true|false`
-Print debug output.
+### `freshCache: true|false`
+Start with a fresh disk cache on every restart.
 
 Default: _false_
+
+### `logLevel: debug|info|warn|error|critical|none
+Minimum log level to print to the server console.
+Left is lowest, right highest.
+
+Default: _none_
 
 LICENSE
 =======

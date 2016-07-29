@@ -24,14 +24,15 @@
   },
   "homepage": "https://github.com/mralex/babel-middleware",
   "dependencies": {
-    "babel-core": "^5.8.34",
-    "micromatch": "^2.3.5"
+    "babel-core": "^6.9.1",
+    "micromatch": "^2.3.10",
+    "mkdirp": "^0.5.1",
+    "rimraf": "^2.5.3"
   },
   "devDependencies": {
     "chai": "^3.4.1",
     "express": "^4.13.3",
     "mocha": "^2.3.4",
-    "rimraf": "^2.4.4",
     "sleep": "^3.0.0",
     "supertest": "^1.1.0"
   }
